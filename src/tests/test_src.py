@@ -43,6 +43,8 @@ class TestMain(unittest.TestCase):
 
         encrypt_single_file(input_path, encrypted_path, self.test_password)
         self.assertTrue(os.path.exists(encrypted_path))
+        # Check that initial file still exists
+        self.assertTrue(os.path.exists(input_path))
 
         result = decrypt_single_file(encrypted_path, decrypted_path, self.test_password)
         self.assertTrue(result)
