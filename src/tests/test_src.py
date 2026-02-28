@@ -4,10 +4,11 @@ import unittest
 
 from src import (
     WrongPasswordError,
+    decrypt_all_files_in_folder,
     decrypt_single_file,
     derive_key,
+    encrypt_all_files_in_folder,
     encrypt_single_file,
-    util_folder_loop,
 )
 
 
@@ -86,10 +87,9 @@ class TestMain(unittest.TestCase):
 
         # Encrypt all
         encrypted_dir = os.path.join(self.temp_dir, "encrypted")
-        util_folder_loop(
+        encrypt_all_files_in_folder(
             self.temp_dir,
             encrypted_dir,
-            encrypt=True,
             password=self.test_password,
         )
         for root, _, files in os.walk(encrypted_dir):
@@ -98,10 +98,9 @@ class TestMain(unittest.TestCase):
 
         # Decrypt all
         decrypted_dir = os.path.join(self.temp_dir, "decrypted")
-        util_folder_loop(
+        decrypt_all_files_in_folder(
             encrypted_dir,
             decrypted_dir,
-            encrypt=False,
             password=self.test_password,
         )
         for root, _, files in os.walk(decrypted_dir):

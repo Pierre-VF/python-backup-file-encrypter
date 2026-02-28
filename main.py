@@ -26,7 +26,7 @@ def encrypt_folder(
     """Encrypt a folder."""
     if output_dir is None:
         output_dir = src._SETTINGS.OUTPUT_FOLDER
-    src.util_folder_loop(root_dir, output_dir, encrypt=True, password=password)
+    src.encrypt_all_files_in_folder(root_dir, output_dir, password=password)
 
 
 @app.command()
@@ -36,7 +36,7 @@ def decrypt_folder(
     password: str | None = None,
 ):
     """Decrypts a folder."""
-    src.util_folder_loop(root_dir, output_dir, encrypt=False, password=password)
+    src.decrypt_all_files_in_folder(root_dir, output_dir, password=password)
 
 
 if __name__ == "__main__":

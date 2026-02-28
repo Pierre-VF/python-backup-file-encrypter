@@ -1,6 +1,7 @@
 import os
 import os.path
 from pathlib import Path
+from typing import Generator
 
 import typer
 from cryptography.hazmat.backends import default_backend
@@ -10,9 +11,9 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
-
-class WrongPasswordError(ValueError):
-    pass
+# ------------------------------------------------------------------------------
+# Exceptions
+# ------------------------------------------------------------------------------
 
 
 class Settings(BaseSettings):
@@ -23,9 +24,18 @@ class Settings(BaseSettings):
 load_dotenv()
 _SETTINGS = Settings()
 
-app = typer.Typer()
+# ------------------------------------------------------------------------------
+# Exceptions
+# ------------------------------------------------------------------------------
 
 
+class WrongPasswordError(ValueError):
+    pass
+
+
+# ------------------------------------------------------------------------------
+# Functions
+# ------------------------------------------------------------------------------
 def derive_key(password: str | None, salt: bytes) -> bytes:
     """Derive a secure encryption key from a password and salt."""
     if password is None:
@@ -107,27 +117,40 @@ def decrypt_single_file(
     return True
 
 
-def util_folder_loop(
-    root_dir: str,
-    output_dir: str | None,
-    encrypt: bool,
-    password: str | None = None,
-) -> None:
-
-    if output_dir is None:
-        output_dir = _SETTINGS.OUTPUT_FOLDER
-    for root, _, files in os.walk(root_dir):
+def folder_files_generator(
+    folder: str,
+    output_dir: str | None = None,
+) -> Generator[tuple[str, str], None, None]:
+    for root, _, files in os.walk(folder):
         for file in files:
             input_path = os.path.join(root, file)
-            rel_path = os.path.relpath(input_path, root_dir)
+            rel_path = os.path.relpath(input_path, folder)
             output_path = os.path.join(output_dir, rel_path)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            yield (input_path, output_path)
 
-            if encrypt:
-                encrypt_single_file(input_path, output_path + ".enc", password=password)
-                typer.echo(f"Encrypted: {input_path} -> {output_path}.enc")
-            else:
-                if file.endswith(".enc"):
-                    output_path = output_path[:-4]  # Remove '.enc'
-                    if decrypt_single_file(input_path, output_path, password=password):
-                        typer.echo(f"Decrypted: {input_path} -> {output_path}")
+
+def encrypt_all_files_in_folder(
+    root_dir: str,
+    output_dir: str | None,
+    password: str | None = None,
+):
+    if output_dir is None:
+        output_dir = _SETTINGS.OUTPUT_FOLDER
+    for i, j in folder_files_generator(root_dir, output_dir=output_dir):
+        j = j + ".enc"
+        encrypt_single_file(i, j, password=password)
+        typer.echo(f"Encrypted: {i} -> {j}")
+
+
+def decrypt_all_files_in_folder(
+    root_dir: str,
+    output_dir: str | None,
+    password: str | None = None,
+):
+    if output_dir is None:
+        output_dir = _SETTINGS.OUTPUT_FOLDER
+    for i, j in folder_files_generator(root_dir, output_dir=output_dir):
+        j = j[:-4]  # Remove '.enc'
+        if decrypt_single_file(i, j, password=password):
+            typer.echo(f"Decrypted: {i} -> {j}")
