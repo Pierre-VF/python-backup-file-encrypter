@@ -3,11 +3,8 @@ import os.path
 from pathlib import Path
 from typing import Generator
 
-import typer
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
@@ -36,18 +33,20 @@ class WrongPasswordError(ValueError):
 # ------------------------------------------------------------------------------
 # Functions
 # ------------------------------------------------------------------------------
-def derive_key(password: str | None, salt: bytes) -> bytes:
+def derive_key(
+    password: str | None, salt: bytes, very_sensitive: bool = False
+) -> bytes:
     """Derive a secure encryption key from a password and salt."""
     if password is None:
         password = _SETTINGS.ENCRYPTION_PASSWORD
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100000,
-        backend=default_backend(),
-    )
-    return kdf.derive(password.encode())
+    # Parameters follow best practices for sensitive files from RFC 7914 described here:
+    # > https://cryptography.io/en/latest/hazmat/primitives/key-derivation-functions/#scrypt
+    if very_sensitive:
+        n = 2**20
+    else:
+        n = 2**14
+    kdf = Scrypt(salt=salt, length=32, n=n, r=8, p=1)
+    return kdf.derive(password.encode("utf-8"))
 
 
 def _default_output(input_path: str, output_path: str | None) -> str:
@@ -64,17 +63,19 @@ def _default_output(input_path: str, output_path: str | None) -> str:
         return output_path
 
 
-def encrypt_single_file(
-    input_path: str,
-    output_path: str | None = None,
-    password: str | None = None,
-):
-    """Encrypt a file using AES-GCM."""
-    output_path = _default_output(input_path, output_path)
+def _generate_key_and_salt(password: str | None = None) -> tuple[AESGCM, bytes]:
     salt = os.urandom(16)
     key = derive_key(password, salt)
     aesgcm = AESGCM(key)
+    return aesgcm, salt
 
+
+def _encrypt_single_file_with_given_aesgcm_and_salt(
+    input_path: str,
+    output_path: str,
+    aesgcm: AESGCM,
+    salt: bytes,
+) -> None:
     with open(input_path, "rb") as f:
         plaintext = f.read()
 
@@ -84,7 +85,23 @@ def encrypt_single_file(
     with open(output_path, "wb") as f:
         f.write(salt + nonce + ciphertext)
 
-    typer.echo(f"File encrypted and saved to {output_path}")
+    print(f"File encrypted and saved to {output_path}")
+
+
+def encrypt_single_file(
+    input_path: str,
+    output_path: str | None = None,
+    password: str | None = None,
+):
+    """Encrypt a file using AES-GCM."""
+    output_path = _default_output(input_path, output_path)
+    aesgcm, salt = _generate_key_and_salt(password)
+    _encrypt_single_file_with_given_aesgcm_and_salt(
+        input_path,
+        output_path,
+        aesgcm=aesgcm,
+        salt=salt,
+    )
 
 
 def decrypt_single_file(
@@ -104,7 +121,7 @@ def decrypt_single_file(
     try:
         plaintext = aesgcm.decrypt(nonce, ciphertext, None)
     except Exception as e:
-        typer.echo(f"Decryption failed: {e}")
+        print(f"Decryption failed: {e}")
         raise WrongPasswordError(f"Decryption failed: {e}")
 
     output_folder = Path(output_path).parent
@@ -113,7 +130,7 @@ def decrypt_single_file(
     with open(output_path, "wb") as f:
         f.write(plaintext)
 
-    typer.echo(f"File decrypted and saved to {output_path}")
+    print(f"File decrypted and saved to {output_path}")
     return True
 
 
@@ -137,10 +154,16 @@ def encrypt_all_files_in_folder(
 ):
     if output_dir is None:
         output_dir = _SETTINGS.OUTPUT_FOLDER
+    aesgcm, salt = _generate_key_and_salt(password)
     for i, j in folder_files_generator(root_dir, output_dir=output_dir):
         j = j + ".enc"
-        encrypt_single_file(i, j, password=password)
-        typer.echo(f"Encrypted: {i} -> {j}")
+        _encrypt_single_file_with_given_aesgcm_and_salt(
+            i,
+            j,
+            aesgcm=aesgcm,
+            salt=salt,
+        )
+        print(f"Encrypted: {i} -> {j}")
 
 
 def decrypt_all_files_in_folder(
@@ -153,4 +176,4 @@ def decrypt_all_files_in_folder(
     for i, j in folder_files_generator(root_dir, output_dir=output_dir):
         j = j[:-4]  # Remove '.enc'
         if decrypt_single_file(i, j, password=password):
-            typer.echo(f"Decrypted: {i} -> {j}")
+            print(f"Decrypted: {i} -> {j}")

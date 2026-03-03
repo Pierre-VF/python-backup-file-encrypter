@@ -1,13 +1,13 @@
 [project]
 name = "python-backup-file-encrypter"
 version = "0.1.0"
-description = "Add your description here"
+description = "File encrypter with python"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "cryptography>=46.0.5",
-    "pydantic-settings>=2.13.1",
-    "typer>=0.24.1",
+    "cryptography>=46.0.5, <47",
+    "pydantic-settings>=2.13.1, <3",
+    "typer>=0.24.1, <1",
 ]
 
 packages = [

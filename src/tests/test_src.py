@@ -18,6 +18,9 @@ class TestMain(unittest.TestCase):
         self.test_salt = os.urandom(16)
         self.test_key = derive_key(self.test_password, self.test_salt)
         self.temp_dir = tempfile.mkdtemp()
+        self.test_files_content = {
+            "test.txt": b"Hello, world!",
+        }
 
     def tearDown(self):
         for root, dirs, files in os.walk(self.temp_dir, topdown=False):
@@ -34,44 +37,56 @@ class TestMain(unittest.TestCase):
         self.assertNotEqual(key1, derive_key("wrongpassword", self.test_salt))
 
     def test_encrypt_decrypt_single_file(self):
-        test_content = b"Hello, world!"
-        input_path = os.path.join(self.temp_dir, "test.txt")
-        encrypted_path = os.path.join(self.temp_dir, "test.enc")
-        decrypted_path = os.path.join(self.temp_dir, "test_decrypted.txt")
+        for i, test_content in self.test_files_content.items():
+            input_path = os.path.join(self.temp_dir, i)
+            encrypted_path = os.path.join(self.temp_dir, f"{i}.enc")
+            decrypted_path = os.path.join(self.temp_dir, f"{i}.dec")
 
-        with open(input_path, "wb") as f:
-            f.write(test_content)
+            with open(input_path, "wb") as f:
+                f.write(test_content)
 
-        encrypt_single_file(input_path, encrypted_path, self.test_password)
-        self.assertTrue(os.path.exists(encrypted_path))
-        # Check that initial file still exists
-        self.assertTrue(os.path.exists(input_path))
+            encrypt_single_file(input_path, encrypted_path, self.test_password)
+            self.assertTrue(os.path.exists(encrypted_path))
 
-        result = decrypt_single_file(encrypted_path, decrypted_path, self.test_password)
-        self.assertTrue(result)
-        self.assertTrue(os.path.exists(decrypted_path))
+            result = decrypt_single_file(
+                encrypted_path, decrypted_path, self.test_password
+            )
+            self.assertTrue(result)
+            self.assertTrue(os.path.exists(decrypted_path))
 
-        with open(decrypted_path, "rb") as f:
-            decrypted_content = f.read()
-        self.assertEqual(decrypted_content, test_content)
+            with open(decrypted_path, "rb") as f:
+                decrypted_content = f.read()
+            self.assertEqual(decrypted_content, test_content)
+
+            # Check that initial file has not been modified
+            self.assertTrue(os.path.exists(input_path))
+            with open(input_path, "rb") as f:
+                content_at_last = f.read()
+            self.assertEqual(content_at_last, test_content)
 
     def test_wrong_password(self):
-        test_content = b"Hello, world!"
-        input_path = os.path.join(self.temp_dir, "test.txt")
-        encrypted_path = os.path.join(self.temp_dir, "test.enc")
-        decrypted_path = os.path.join(self.temp_dir, "test_decrypted.txt")
+        for i, test_content in self.test_files_content.items():
+            input_path = os.path.join(self.temp_dir, i)
+            encrypted_path = os.path.join(self.temp_dir, f"{i}.enc")
+            decrypted_path = os.path.join(self.temp_dir, f"{i}.dec")
 
-        with open(input_path, "wb") as f:
-            f.write(test_content)
+            with open(input_path, "wb") as f:
+                f.write(test_content)
 
-        encrypt_single_file(input_path, encrypted_path, self.test_password)
-        try:
-            result = decrypt_single_file(
-                encrypted_path, decrypted_path, "wrongpassword"
-            )
-            self.assertFalse(result)
-        except WrongPasswordError:
-            pass  # Error should be triggered
+            encrypt_single_file(input_path, encrypted_path, self.test_password)
+            try:
+                result = decrypt_single_file(
+                    encrypted_path, decrypted_path, "wrongpassword"
+                )
+                self.assertFalse(result)
+            except WrongPasswordError:
+                pass  # Error should be triggered
+
+            # Check that initial file has not been modified
+            self.assertTrue(os.path.exists(input_path))
+            with open(input_path, "rb") as f:
+                content_at_last = f.read()
+            self.assertEqual(content_at_last, test_content)
 
     def test_process_files_encrypt_decrypt(self):
         # Create a nested structure
